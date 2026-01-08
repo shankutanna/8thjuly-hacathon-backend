@@ -22,7 +22,7 @@ jobs:
 
       - name: Load Kubernetes Config
         run: |
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+          printf "%s" "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
           export KUBECONFIG=$PWD/kubeconfig
 
       - name: Verify Cluster Connectivity
@@ -30,7 +30,7 @@ jobs:
           kubectl get nodes
           kubectl version --short
 
-  environment-setup:
+  environment-bootstrap:
     name: Environment Bootstrap
     runs-on: ubuntu-latest
     needs: platform-validate
@@ -38,7 +38,7 @@ jobs:
     steps:
       - name: Load Kubernetes Config
         run: |
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
+          printf "%s" "${{ secrets.KUBE_CONFIG }}" | base64 -d > kubeconfig
           export KUBECONFIG=$PWD/kubeconfig
 
       - name: Create Namespaces (idempotent)
@@ -47,23 +47,23 @@ jobs:
           kubectl create namespace test --dry-run=client -o yaml | kubectl apply -f -
           kubectl create namespace prod --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Label Environments
+      - name: Label Namespaces
         run: |
           kubectl label namespace dev env=dev --overwrite
           kubectl label namespace test env=test --overwrite
           kubectl label namespace prod env=prod --overwrite
 
-  promote:
+  environment-promotion:
     name: Environment Promotion Logic
     runs-on: ubuntu-latest
-    needs: environment-setup
+    needs: environment-bootstrap
 
     steps:
       - name: Determine Target Environment
         run: |
           if [[ "${GITHUB_REF}" == "refs/heads/develop" ]]; then
             echo "TARGET_ENV=dev" >> $GITHUB_ENV
-          elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
+          elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
             echo "TARGET_ENV=prod" >> $GITHUB_ENV
           else
             echo "TARGET_ENV=test" >> $GITHUB_ENV
@@ -71,5 +71,8 @@ jobs:
 
       - name: Promotion Summary
         run: |
-          echo "Promoting platform to environment: $TARGET_ENV"
-          echo "Branch: ${GITHUB_REF}"
+          echo "-----------------------------------"
+          echo "Platform Name : $PLATFORM_NAME"
+          echo "Git Branch    : ${GITHUB_REF}"
+          echo "Target Env    : $TARGET_ENV"
+          echo "-----------------------------------"
